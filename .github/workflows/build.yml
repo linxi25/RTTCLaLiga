@@ -31,6 +31,7 @@ jobs:
 
       - name: Fetch new results from StadiumTT
         if: github.event_name != 'push'
+        continue-on-error: true   # if StadiumTT is down, still rebuild with what we have
         run: |
           pip install playwright
           python -m playwright install --with-deps chromium
