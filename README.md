@@ -1,4 +1,4 @@
-# Rice Table Tennis League – Ratings
+# Rice Table Tennis La Liga – Ratings
 
 Upload each league night's results → GitHub recalculates everyone's rating → the ratings page updates. The link never changes, and every past week stays viewable under **Match history**.
 
