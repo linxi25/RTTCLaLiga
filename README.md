@@ -2,8 +2,8 @@
 
 Upload each league night's results → GitHub recalculates everyone's rating → the ratings page updates. The link never changes, and every past week stays viewable under **Match history**.
 
-- Ratings page: `https://linxi25.github.io/RTTC_ligueA/`
-- Results entry: `https://linxi25.github.io/RTTC_ligueA/admin.html`
+- Ratings page: `https://linxi25.github.io/RTTCLaLiga/`
+- Results entry: `https://linxi25.github.io/RTTCLaLiga/admin.html`
 
 Visitors must answer the club question (set in `config.json`) before anything is shown. The data is encrypted in the page, so the answer is required to read it; case, spaces and punctuation in the answer are ignored, and each browser remembers it.
 
@@ -22,6 +22,8 @@ Visitors must answer the club question (set in `config.json`) before anything is
 To change the question, edit `config.json`; to change the answer, edit the `SITE_ANSWERS` secret and re-run the workflow.
 
 ## Each week
+
+**Automatic (default).** Every Friday at 10:47 pm Central, and again Saturday at 10:17 am, GitHub opens the StadiumTT tournament page(s) listed in `config.json` (`stadiumtt_urls`), picks up newly CERTIFIED matches, saves them under `data/results/`, and rebuilds the site. Matches only get added, never removed, so manual fixes stick. To run it right now: Actions → *Update ratings site* → Run workflow. If a new season uses a new StadiumTT tournament, add its link to `stadiumtt_urls`.
 
 **Option A – entry page.** Open `admin.html`, enter the club answer and your token, pick the date, paste the matches (one per line, `Player A 3-1 Player B`), check the preview, submit. New names are flagged so typos don't create new players; re-submitting a date asks before replacing it.
 
