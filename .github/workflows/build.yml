@@ -3,10 +3,15 @@ name: Update ratings site
 on:
   push:
     branches: [main]
+  schedule:
+    # Friday 10:47 pm Central (04:47 UTC Sat) — after league night
+    - cron: "47 4 * * 6"
+    # Saturday 10:17 am Central (16:17 UTC) — catch matches certified late
+    - cron: "17 16 * * 6"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -23,6 +28,21 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install cryptography
+
+      - name: Fetch new results from StadiumTT
+        if: github.event_name != 'push'
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+          python scripts/fetch_stadiumtt.py
+          if [ -n "$(git status --porcelain data)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data
+            git commit -m "Results from StadiumTT"
+            git push
+          fi
+
       - name: Compute ratings and build page
         run: python scripts/build.py
         env:
