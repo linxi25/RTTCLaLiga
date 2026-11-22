@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Enter results – __TITLE__</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f6f2;--card:#fff;--tx:#1d1d1b;--mut:#6b6a64;--line:#e4e2da;--acc:#d9480f;--up:#2b8a3e;--dn:#c92a2a;--warn:#fff4e6}
+@media(prefers-color-scheme:dark){:root{--bg:#161615;--card:#212120;--tx:#efeee8;--mut:#a09f98;--line:#33332f;--acc:#ff922b;--up:#69db7c;--dn:#ff8787;--warn:#3a2a14}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+.sub{color:var(--mut);font-size:13px;margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--mut);margin:0 0 4px}
+input,textarea,select{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{min-height:110px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:160px;margin-bottom:10px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:8px;padding:8px 14px;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+th{font-size:12px;color:var(--mut);font-weight:500}
+td input{padding:6px 8px}td.sc input{width:52px;text-align:center}
+.x{border:0;background:none;color:var(--mut);padding:4px 8px}
+.up{color:var(--up)}.dn{color:var(--dn)}.mut{color:var(--mut)}.small{font-size:13px}
+.new{background:var(--warn);border-radius:8px;padding:10px 12px;margin-top:10px}
+.new .row>div{margin-bottom:6px}
+#msg{white-space:pre-wrap}.err{color:var(--dn)}.ok{color:var(--up)}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut)}.chk input{width:auto}
+a{color:var(--acc)}
+</style></head>
+<body><main>
+<h1>Enter results</h1>
+<p class="sub">__TITLE__ · After you submit, GitHub recalculates the ratings and the <a href="./">ratings page</a> updates in about 1–2 minutes.</p>
+
+<section class="card" id="cfg">
+  <h2>1 · Keys</h2>
+  <div class="row">
+    <div><label for="ans" id="ansq">Club question</label><input id="ans" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Answer (unlocks player list &amp; preview)"></div>
+  </div>
+  <div class="row">
+    <div><label for="tok">GitHub token (fine-grained, Contents: read &amp; write)</label><input id="tok" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+  </div>
+  <div class="row" id="repoRow">
+    <div><label for="own">GitHub username</label><input id="own"></div>
+    <div><label for="rep">Repository</label><input id="rep"></div>
+  </div>
+  <label class="chk"><input type="checkbox" id="rem"> Remember on this device</label>
+</section>
+
+<section class="card">
+  <h2>2 · Matches</h2>
+  <div class="row"><div><label for="date">League night</label><input id="date" type="date"></div></div>
+  <label for="paste">Quick paste, one match per line: <code>Player A 3-1 Player B</code>, then press “Fill table”</label>
+  <textarea id="paste" placeholder="Alex Chen 3-1 Sam Lee&#10;Jordan Park 3-0 Riley Wu"></textarea>
+  <p><button id="parse">Fill table</button> <span id="pmsg" class="small mut"></span></p>
+  <table><thead><tr><th>Player A</th><th>Score</th><th></th><th>Player B</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+  <p><button id="add">+ Add match</button></p>
+  <div id="newBox"></div>
+</section>
+
+<section class="card">
+  <h2>3 · Preview &amp; submit</h2>
+  <div id="prev" class="small mut">Rating changes appear here once matches are filled in.</div>
+  <p><button class="pri" id="go">Submit to GitHub</button></p>
+  <div id="msg" class="small"></div>
+</section>
+
+<datalist id="names"></datalist>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm=s=>String(s||"").trim().replace(/\s+/g," ");
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+
+// repo: auto-detect from <owner>.github.io/<repo>/
+const host=location.hostname.match(/^([^.]+)\.github\.io$/i);
+const seg=location.pathname.split("/").filter(Boolean);
+$("#own").value=store.get("tt_owner")||(host?host[1]:"");
+$("#rep").value=store.get("tt_repo")||(host&&seg.length&&!/\.html$/.test(seg[0])?seg[0]:host?`${host[1]}.github.io`:"");
+if(host&&$("#own").value&&$("#rep").value)$("#repoRow").style.display="none";
+const saved=store.get("tt_token");if(saved){$("#tok").value=saved;$("#rem").checked=true}
+const d=new Date();$("#date").value=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+
+let players={};// lower name -> {name, rating}
+const normA=t=>String(t).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu,"");
+const ub=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
+async function unlock(P,ans){
+  if(!P.enc)return P;
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(normA(ans)),"PBKDF2",false,["deriveKey"]);
+  for(const w of P.keys){try{
+    const kek=await crypto.subtle.deriveKey({name:"PBKDF2",hash:"SHA-256",salt:ub(w.salt),iterations:P.iter},base,{name:"AES-GCM",length:256},false,["decrypt"]);
+    const k=await crypto.subtle.importKey("raw",await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(w.iv)},kek,ub(w.ct)),"AES-GCM",false,["decrypt"]);
+    return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(P.iv)},k,ub(P.ct))))}catch(e){}}
+  return null;
+}
+const RAW=JSON.parse(document.getElementById("data").textContent);
+if(RAW.q)$("#ansq").textContent=RAW.q;else $("#ans").closest(".row").style.display="none";
+async function loadData(){
+  const D=await unlock(RAW,$("#ans").value);
+  if(!D){players={};$("#names").innerHTML="";$("#ans").style.borderColor=$("#ans").value?"var(--dn)":"";update();return}
+  $("#ans").style.borderColor="var(--up)";store.set("tt_answer",$("#ans").value);
+  players={};D.players.forEach(p=>players[p.name.toLowerCase()]={name:p.name,rating:p.rating});
+  $("#names").innerHTML=D.players.map(p=>`<option value="${esc(p.name)}">`).join("");update();
+}
+$("#ans").value=store.get("tt_answer")||"";
+$("#ans").addEventListener("change",loadData);
+loadData();
+
+function addRow(a="",sa="",sb="",b=""){
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td><input list="names" class="a"></td><td class="sc"><input class="sa" inputmode="numeric"></td><td class="sc"><input class="sb" inputmode="numeric"></td><td><input list="names" class="b"></td><td><button class="x" title="Remove">✕</button></td>`;
+  tr.querySelector(".a").value=a;tr.querySelector(".b").value=b;tr.querySelector(".sa").value=sa;tr.querySelector(".sb").value=sb;
+  tr.querySelector(".x").onclick=()=>{tr.remove();update()};
+  $("#rows").appendChild(tr);
+}
+function matches(){
+  return[...$("#rows").children].map(tr=>({a:norm(tr.querySelector(".a").value),b:norm(tr.querySelector(".b").value),sa:tr.querySelector(".sa").value.trim(),sb:tr.querySelector(".sb").value.trim()})).filter(m=>m.a||m.b||m.sa||m.sb);
+}
+const canon=n=>players[n.toLowerCase()]?players[n.toLowerCase()].name:n;
+
+$("#parse").onclick=()=>{
+  const bad=[];let n=0;
+  $("#paste").value.split(/\n/).map(norm).filter(Boolean).forEach(l=>{
+    const m=l.match(/^(.+?)\s+(\d+)\s*[-:：–]\s*(\d+)\s+(.+)$/);
+    if(m){addRow(canon(norm(m[1])),m[2],m[3],canon(norm(m[4])));n++}else bad.push(l)});
+  [...$("#rows").children].forEach(tr=>{if(![...tr.querySelectorAll("input")].some(i=>i.value.trim()))tr.remove()});
+  $("#pmsg").textContent=`Added ${n} match${n===1?"":"es"}`+(bad.length?` · Couldn't read: ${bad.join(" / ")}`:"");
+  if(n)$("#paste").value=bad.join("\n");update();
+};
+$("#add").onclick=()=>{addRow();update()};
+$("#rows").addEventListener("input",update);
+$("#newBox").addEventListener("input",update);
+
+function validate(){
+  const ms=matches(),errs=[];
+  ms.forEach((m,i)=>{const k=`Match ${i+1}`;
+    if(!m.a||!m.b)errs.push(`${k}: missing a player name`);
+    else if(m.a.toLowerCase()===m.b.toLowerCase())errs.push(`${k}: a player can't play themselves`);
+    if(!/^\d+$/.test(m.sa)||!/^\d+$/.test(m.sb))errs.push(`${k}: scores must be whole numbers`);
+    else if(+m.sa===+m.sb)errs.push(`${k}: ${m.sa}-${m.sb} has no winner`)});
+  if(!ms.length)errs.push("No matches entered yet");
+  return{ms,errs};
+}
+function newNames(ms){const s=new Map();ms.forEach(m=>[m.a,m.b].forEach(n=>{if(n&&!players[n.toLowerCase()]&&!s.has(n.toLowerCase()))s.set(n.toLowerCase(),n)}));return[...s.values()]}
+function startOf(n){const el=[...document.querySelectorAll("#newBox input[data-n]")].find(i=>i.dataset.n===n);const v=el&&el.value.trim();return v&&!isNaN(+v)?+v:1000}
+
+function update(){
+  const{ms,errs}=validate();const nn=newNames(ms);
+  // new players box (keep typed start ratings)
+  const keep={};document.querySelectorAll("#newBox input[data-n]").forEach(i=>keep[i.dataset.n]=i.value);
+  const want=nn.join("\n"),have=$("#newBox").dataset.names||"";
+  if(want!==have){
+    $("#newBox").dataset.names=want;
+    $("#newBox").innerHTML=nn.length?`<div class="new"><b>New players</b> <span class="small mut">(if this is a typo, fix the name to match an existing player)</span><div class="row" style="margin-top:8px">${nn.map(n=>`<div><label>Starting rating for ${esc(n)}</label><input data-n="${esc(n)}" inputmode="numeric" value="${esc(keep[n]||"1000")}"></div>`).join("")}</div></div>`:"";
+  }
+  if(errs.length&&ms.length){$("#prev").innerHTML=`<span class="err">${errs.map(esc).join("<br>")}</span>`;return}
+  if(!ms.length){$("#prev").innerHTML=`<span class="mut">Rating changes appear here once matches are filled in.</span>`;return}
+  // preview
+  const r={},b={},wl={};
+  ms.forEach(m=>{const a=canon(m.a),bb=canon(m.b);
+    [a,bb].forEach(p=>{if(!(p in r))r[p]=players[p.toLowerCase()]?players[p.toLowerCase()].rating:startOf(p);if(!(p in b)){b[p]=r[p];wl[p]=[0,0]}});
+    const ea=1/(1+Math.pow(10,(r[bb]-r[a])/400)),aw=+m.sa>+m.sb,dd=32*((aw?1:0)-ea);
+    r[a]=Math.round((r[a]+dd)*10)/10;r[bb]=Math.round((r[bb]-dd)*10)/10;wl[aw?a:bb][0]++;wl[aw?bb:a][1]++});
+  const rows=Object.keys(r).sort((x,y)=>r[y]-r[x]).map(p=>{const c=r[p]-b[p];return`<tr><td>${esc(p)}</td><td>${wl[p][0]}-${wl[p][1]}</td><td>${Math.round(b[p])}</td><td><b>${Math.round(r[p])}</b></td><td class="${c>0?"up":c<0?"dn":"mut"}">${(c>0?"+":"")+c.toFixed(1)}</td></tr>`}).join("");
+  $("#prev").innerHTML=`<table><tr><th>Player</th><th>W-L</th><th>Before</th><th>After</th><th>Change</th></tr>${rows}</table><p class="mut">Preview starts from the current ratings. If you're correcting an earlier week, GitHub recalculates everything from the start.</p>`;
+}
+
+// ---- GitHub API ----
+const b64e=s=>{const u=new TextEncoder().encode(s);let t="";u.forEach(c=>t+=String.fromCharCode(c));return btoa(t)};
+const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")),c=>c.charCodeAt(0)));
+const csvq=s=>/[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
+async function gh(path,opt={}){
+  const res=await fetch(`https://api.github.com/repos/${$("#own").value.trim()}/${$("#rep").value.trim()}/${path}`,{...opt,headers:{Accept:"application/vnd.github+json",Authorization:`Bearer ${$("#tok").value.trim()}`,"X-GitHub-Api-Version":"2022-11-28",...(opt.body?{"Content-Type":"application/json"}:{})}});
+  if(res.status===404&&!opt.method)return null;
+  const j=await res.json().catch(()=>({}));
+  if(!res.ok){const e=new Error(res.status===401?"GitHub token is invalid or expired":res.status===403||res.status===404?"Token can't write to this repository (check the repo name and Contents permission)":j.message||res.statusText);throw e}
+  return j;
+}
+const say=(t,c="")=>{$("#msg").className="small "+c;$("#msg").textContent=t};
+
+$("#go").onclick=async()=>{
+  const{ms,errs}=validate();if(errs.length)return say(errs.join("\n"),"err");
+  if(RAW.enc&&!Object.keys(players).length)return say("Enter the club answer first so names match existing players","err");
+  if(!$("#tok").value.trim())return say("Enter your GitHub token first","err");
+  if(!$("#own").value.trim()||!$("#rep").value.trim())return say("Enter the GitHub username and repository","err");
+  const date=$("#date").value;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return say("Pick the league night date","err");
+  store.set("tt_token",$("#rem").checked?$("#tok").value.trim():null);
+  store.set("tt_owner",$("#own").value.trim());store.set("tt_repo",$("#rep").value.trim());
+  $("#go").disabled=true;
+  try{
+    say("Connecting to GitHub…");
+    const file=`data/results/${date}.csv`;
+    const old=await gh(`contents/${file}`);
+    if(old&&!confirm(`Results for ${date} already exist. Replace them with these?`)){say("Cancelled");return}
+    const nn=newNames(ms);
+    if(nn.length){
+      say("Adding new players…");
+      const pf=await gh("contents/data/players.csv");
+      let txt=pf?b64d(pf.content):"name,start_rating\n";if(!txt.endsWith("\n"))txt+="\n";
+      const existing=new Set(txt.split("\n").slice(1).map(l=>norm(l.split(",")[0]).toLowerCase()));
+      nn.filter(n=>!existing.has(n.toLowerCase())).forEach(n=>txt+=`${csvq(n)},${startOf(n)}\n`);
+      await gh("contents/data/players.csv",{method:"PUT",body:JSON.stringify({message:`Add players: ${nn.join(", ")}`,content:b64e(txt),...(pf?{sha:pf.sha}:{})})});
+    }
+    say("Saving results…");
+    const csv="player_a,player_b,score_a,score_b\n"+ms.map(m=>[canon(m.a),canon(m.b),+m.sa,+m.sb].map(x=>csvq(String(x))).join(",")).join("\n")+"\n";
+    await gh(`contents/${file}`,{method:"PUT",body:JSON.stringify({message:`Results ${date} (${ms.length} matches)`,content:b64e(csv),...(old?{sha:old.sha}:{})})});
+    const actions=`https://github.com/${$("#own").value.trim()}/${$("#rep").value.trim()}/actions`;
+    $("#msg").className="small ok";
+    $("#msg").innerHTML=`Submitted ${ms.length} matches ✓ The ratings page updates in about 1–2 minutes.<br><a href="./">Ratings page</a> · <a href="${actions}" target="_blank" rel="noopener">Update progress</a>`;
+    $("#rows").innerHTML="";addRow();
+  }catch(e){say("Submit failed: "+e.message,"err")}
+  finally{$("#go").disabled=false}
+};
+addRow();update();
+</script>
+</main></body></html>
