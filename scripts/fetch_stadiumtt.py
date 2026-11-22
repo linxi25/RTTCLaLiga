@@ -60,8 +60,11 @@ def fetch(url):
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1200, "height": 2000})
-        pg.goto(url.split("#")[0], wait_until="networkidle", timeout=90_000)
-        pg.get_by_text(re.compile(r"^\s*MATCHES\s*$", re.I)).first.click(force=True)
+        # StadiumTT keeps a live connection open, so never wait for "networkidle"
+        pg.goto(url.split("#")[0], wait_until="domcontentloaded", timeout=90_000)
+        tab = pg.get_by_text(re.compile(r"^\s*MATCHES\s*$", re.I)).first
+        tab.wait_for(timeout=60_000)
+        tab.click(force=True)
         pg.wait_for_function("document.body.innerText.match(/CERTIFIED|NOT SUBMITTED/)", timeout=60_000)
         last = -1
         for _ in range(30):  # scroll until no more matches load
