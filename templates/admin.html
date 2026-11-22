@@ -53,7 +53,7 @@ a{color:var(--acc)}
 <section class="card">
   <h2>2 · Matches</h2>
   <div class="row"><div><label for="date">League night</label><input id="date" type="date"></div></div>
-  <label for="paste">Quick paste, one match per line: <code>Player A 3-1 Player B</code>, then press “Fill table”</label>
+  <label for="paste">Paste the StadiumTT <b>Matches</b> page (select all → copy → paste here), or type one match per line: <code>Player A 3-1 Player B</code>. Then press “Fill table”.</label>
   <textarea id="paste" placeholder="Alex Chen 3-1 Sam Lee&#10;Jordan Park 3-0 Riley Wu"></textarea>
   <p><button id="parse">Fill table</button> <span id="pmsg" class="small mut"></span></p>
   <table><thead><tr><th>Player A</th><th>Score</th><th></th><th>Player B</th><th></th></tr></thead><tbody id="rows"></tbody></table>
@@ -122,7 +122,43 @@ function matches(){
 }
 const canon=n=>players[n.toLowerCase()]?players[n.toLowerCase()].name:n;
 
+// StadiumTT "Matches" tab, copied as text: blocks of
+// LEAGUE m/d ... • GROUP n (X VS. Y) / CERTIFIED / ... / score / ... / "Last, First" / score / ... / "Last, First"
+function stadiumName(n){
+  const p=n.split(",").map(x=>x.trim()).filter(Boolean);
+  let full=p.length>1?p.slice(1).join(" ")+" "+p[0]:p[0];
+  if(full===full.toUpperCase())full=full.toLowerCase().replace(/(^|[\s\-'])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase());
+  return canon(norm(full));
+}
+function parseStadium(text){
+  const L=text.split(/\n/).map(norm).filter(Boolean),out=[];let skipped=0;
+  for(let i=0;i<L.length;i++){
+    const h=L[i].match(/^(?:LEAGUE\s+)?(\d{1,2})\/(\d{1,2}).*\bGROUP\b/i);
+    if(!h)continue;
+    let j=i+1,end=j;while(end<L.length&&!/\bGROUP\b/i.test(L[end])&&!/^SHARE$/i.test(L[end]))end++;
+    const blk=L.slice(j,end);
+    if(!blk.some(x=>/^CERTIFIED$/i.test(x))){skipped++;continue}
+    const nm=[];
+    // names: lines with a comma that aren't affiliation lines
+    blk.forEach(x=>{if(/,/.test(x)&&!/AFFILIATION|CLUB|\(USA\)|•/i.test(x))nm.push(x)});
+    const nums=blk.filter(x=>/^\d{1,2}$/.test(x));
+    if(nm.length===2&&nums.length>=2)out.push({md:[+h[1],+h[2]],a:stadiumName(nm[0]),sa:nums[0],sb:nums[1],b:stadiumName(nm[1])});
+  }
+  return{out,skipped};
+}
 $("#parse").onclick=()=>{
+  const txt=$("#paste").value;
+  if(/\bCERTIFIED\b|NOT SUBMITTED|ROUND ROBIN/i.test(txt)){
+    const{out,skipped}=parseStadium(txt);
+    if(!out.length){$("#pmsg").textContent="No certified matches found in the StadiumTT text";return}
+    const key=m=>m.md[0]*100+m.md[1],last=Math.max(...out.map(key)),wk=out.filter(m=>key(m)===last).reverse();
+    const now=new Date();let y=now.getFullYear();if(wk[0].md[0]>now.getMonth()+2)y--;
+    $("#date").value=`${y}-${String(wk[0].md[0]).padStart(2,"0")}-${String(wk[0].md[1]).padStart(2,"0")}`;
+    $("#rows").innerHTML="";wk.forEach(m=>addRow(m.a,m.sa,m.sb,m.b));
+    const older=out.length-wk.length;
+    $("#pmsg").textContent=`StadiumTT: ${wk.length} certified match${wk.length===1?"":"es"} for ${$("#date").value}`+(skipped?` · ${skipped} not submitted yet (skipped)`:"")+(older?` · ${older} from earlier weeks ignored`:"");
+    $("#paste").value="";update();return;
+  }
   const bad=[];let n=0;
   $("#paste").value.split(/\n/).map(norm).filter(Boolean).forEach(l=>{
     const m=l.match(/^(.+?)\s+(\d+)\s*[-:：–]\s*(\d+)\s+(.+)$/);
